@@ -1,0 +1,309 @@
+---
+title: "Final Project: Intro to Probablity II"
+author: "Joe Cristian"
+date: '`r format(Sys.Date(), "%A, %d %B %Y")`'
+output: 
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    df_print: paged
+    theme: flatly
+    highlight: pygment
+    
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  echo = FALSE
+)
+
+options(scipen = 999)
+```
+
+```{r,message=FALSE,warning=FALSE}
+library(dplyr) 
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(lubridate)
+library(tidytext)
+library(plotly)
+library(scales)
+library(stringr)
+```
+
+# Pendahuluan
+
+Laporan berikut dibuat untuk kebutuhan projek akhir kelas Introduction to Probability dari Pacmann. Data ini berisi tentang biodata pelanggan asuransi, informasi kesehatan, dan biaya premi yang dibayar. Dalam tugas ini diminta untuk menganalisa secara descriptive dan mengidentifikasi peluang kondisi tertentu dari variabel kategorik dan numerik.  
+
+
+# Exploratory Data Analysis
+
+Berikut data yang akan diolah
+
+```{r}
+dat <- read.csv("insurance.csv")
+dat
+```
+
+
+Untuk mengenal data lebih lanjut, berikut adalah deskripsi dari tiap variabel:     
+
+- `age`: umur dari nasabah        
+- `sex`: jenis kelamin       
+- `bmi`: Body Mass Index, angka yang menjadi penilaian standar untuk menentukan apakah berat badan Anda tergolong normal, kurang, berlebih, atau obesitas      
+- `children`: Jumlah anak yang dilindungi asuransi       
+- `smoker`: Apakah nasabah perokok atau tidak       
+- `region`: Area tempat tinggal nasabah       
+- `charges`: biaya yang dikenakan oleh perusahaan asuransi   
+
+
+## Descriptive Analytics
+
+Dimulai dari yang paling mendasar, mari mencari berapa rata-rata umur nasabah dan apakah ada perbedaan BMI untuk para perokok dan berdasarkan gender, lalu apakah ada perbedaan biaya yang dikenakan jika nasabah merorok, sudah tua, atau BMI-nya tinggi
+
+```{r}
+# R is super easy to do data wrangling and eda. you guys should try it sometimes
+# dplyr > pandas 
+mean_umur_all <- round(mean(dat$age))
+mean_bmi_all <- round(mean(dat$bmi))
+
+
+dat %>% 
+  mutate(smoker = as.factor(smoker)) %>% 
+  group_by(smoker) %>% 
+  summarise(mean_age = round(mean(age)),
+            mean_bmi = round(mean(bmi)),
+            mean_charges = round(mean(charges)),
+            var_charges = var(charges)) 
+
+```
+
+Data diatas menunjukkan rata-rata umur, bmi, dan biaya asuransi berdasarkan apakah nasabah merokok atau tidak. Ada juga kolom yang menunjukkan varian biaya asuransi. Rata-rata Umur dari seluruh nasabah adalah `r mean_umur_all` sedangkan rata-rata BMI nya `r mean_bmi_all`. Jadi diketahui bahwa rata-rata umur dan BMI tidak berbeda dari keseluruhan data ataupun dari kelompok perokok dan yang tidak.  
+
+Namun hal terlihat berbeda dari biaya asuransi yang diberikan kepada perokok. Nasabah yang merokok cenderung memiliki biaya lebih tinggi, rata-rata biayanya bahkan mencapai 3x lipat. Namun variasi biaya asuransi orang yang merokok lebih tinggi. Barangkali ada variabel-variabel lain yang berhubungan dengan biaya asuransi orang yang merokok sehingga biayanya berbeda-beda. 
+
+```{r}
+dat %>% 
+  mutate(sex = as.factor(sex)) %>% 
+  group_by(sex) %>% 
+  summarise(mean_age = round(mean(age)),
+            mean_bmi = round(mean(bmi)),
+            mean_charges = round(mean(charges)),
+            var_charges = var(charges)) 
+```
+
+Data diatas menunjukkan rata-rata umur, bmi, dan biaya asuransi berdasarkan gender nasabah. Ada juga kolom yang menunjukkan varian biaya asuransi. Dari sini diketahui bahwa umur dan BMI baik laki-lakia atau perempuan tidak jauh berbeda. Diketahui juga bahwa rata-rata dan varian biaya yang diberikan lebih besar untuk laki-laki. 
+
+BMI menjadi salah satu indikator apakah orang tergolong sehat dari berat badannya. Seperti yang kita ketahui bahwa kekurangan atau kelebihan berat badan tidak baik untuk kesehatan. Sehingga tidak aneh jika perusahaan asuransi memberikan biaya yang lebih tinggi kepada orang yang memiliki BMI tidak normal. BMI akan dikatakan overweight jika sudah diatas 25
+
+```{r}
+dat %>% 
+  mutate(`bmi>25` = as.factor(ifelse(bmi>25,"yes","no"))) %>% 
+  group_by(`bmi>25`) %>% 
+  summarise(mean_charges = round(mean(charges)))
+
+```
+
+Seperti yang diduga sebelumnya, benar bahwa orang dengan BMI tinggi memiliki rata-rata tagihan yang lebih besar.
+
+
+## Analisa Variabel Kategorik (PMF)
+
+Setelah melihat deskripsi dari data, berikutnya kita ingin melihat perbedaan peluang-peluang tertentu diantara variabel-variabel kategorik yang ada
+
+```{r}
+proporsi_perokok <- prop.table(table(dat$smoker))
+proporsi_region <- prop.table(table(dat$region))
+
+mean_charges_gender <- dat %>% group_by(sex) %>% 
+  summarise(mean=mean(charges),
+            median=median(charges))
+
+mean_charges_gender
+```
+
+Data diatas menunjukkan rata-rata dan median dari biaya asuransi untuk kedua gender. Rata-rata biaya pria lebih tinggi sekilas menunjukkan kalau gender pria memiliki tagihan lebih tinggi. Namun median wanita ternyata lebih tinggi. Kita harus melihat distribusi biaya kedua gender 
+
+```{r,warning=FALSE,message=FALSE}
+
+ggboxplot(dat,x = "sex",y = "charges",color = "sex", 
+          palette = c("#00AFBB", "#E7B800"),
+          ylab = "Charges", xlab = "Gender")
+```
+
+Dari boxplot diatas terlihat bahwa female median dari wanita tidak terlalu berbeda, namun memang memiliki banyak outlier. Distribusi charges pria lebih lebar, salah satu ciri dari data dengan variasi tinggi, cocok dengan temuan di subbab sebelumnya bahwa variasi charges pria lebih tinggi.
+
+Selain gender, bmi, dan rokok; kita juga mempunyai dugaan apakah lokasi tempat tinggal nasabah memiliki hubungan dengan tinggi rendahnya biaya yang dikeluarkan
+
+```{r}
+proporsi_region
+```
+
+Data diatas menunjukkan proporsi data nasabah di masing-masing region. terlihat bahwa sebaran data cukup merata. 
+
+```{r}
+ggboxplot(dat,x = "region",y = "charges",color = "region", 
+          ylab = "Charges", xlab = "Region",title = "Distribusi Tagihan disetiap Region") +
+  theme(legend.position = "none")
+```
+
+```{r,warning=FALSE,message=FALSE}
+dat %>%
+  ggplot( aes(x=charges, fill=region)) +
+    geom_histogram( color="#e9ecef", alpha=0.4, position = 'identity',bins = 50) +
+    theme_minimal() +
+    labs(fill="")
+
+```
+
+Kedua gambar diatas sama-sama menunjukkan distribusi tagihan disetiap region. Sekilas terlihat bahwa distribusi berbentuk exponential, ini wajar mengingat tagihan tidak mungkin dibawah 0 dan dari boxplot pun menunjukkan Q1~Q3 data berada di angka 1000~20000, mayoritas biaya ada di angka rendah. Dilihat dari sebarannya, orang-orang dari region southwest lebih mungkin untuk mempunyai tagihan tinggi. 
+
+
+Diketahui juga bahwa proporsi perokok lebih rendah dari yang tidak merokok (proporsi merokok = `r proporsi_perokok[2]` sedangkan yang tidak merokok = `r proporsi_perokok[1]`). Namun kali ini kita ingin melihat berapa peluang seseorang adalah perempuan diketahui jika dia merokok dan juga peluang dia laki-laki jika dia merokok
+
+Notasi:   
+
+- $P(W)$ = Peluang seseorang wanita   
+- $P(L)$ = Peluang seseorang Laki-laki   
+- $P(S)$ = Peluang seseorang Merokok   
+
+Jumlah orang merokok dan yang tidak merokok
+```{r}
+table(dat$smoker)
+```
+
+```{r}
+dat %>% 
+  group_by(sex) %>% 
+  count(smoker)
+```
+
+seorang wanita diketahui dia merokok
+$$
+P(W|S) = \frac{n(W \cap S))}{n(S)} \\
+P(W|S) = \frac{115}{274 } \\
+P(W|S) = 0.4197808
+$$
+
+Sedankan berikut peluang seorang laki-laki diketahui dia merokok
+$$
+P(L|S) = \frac{n(L \cap S))}{n(S)} \\
+P(L|S) = \frac{159}{274 } \\
+P(L|S) = 0.580292
+$$
+
+Berdasarkan perhitungan diatas diketahui bahwa peluang seseorang adalah wanita diketahui dia merokok adlaah 41.9% dan peluang seseorang adalah laki-laki diketahui dia merokok adalah 58.02%
+
+
+## Analisa Variabel Kontinu (CDF)
+
+Variabel dalam data yang kita punya tidak semuanya berbentuk kategorik, untuk memahami kemungkinan kondisi variabel bernilai kontinu terhadap tagihan kesehatan, kita bisa melakukan analisa CDF pada data.
+
+```{r}
+dat %>% 
+  ggplot( aes(x=bmi, fill=bmi)) +
+  geom_histogram( color="#e9ecef", alpha=0.4, position = 'identity',bins = 50) +
+  theme_minimal() +
+  labs(fill="", title = "Distribusi BMI seluruh data")
+```
+
+## Analisa korelasi Variabel
+
+```{r}
+GGally::ggcorr(dat %>% select_if(is.numeric),label = T)+
+  labs(title = "Korelasi antar variabel numerik data Insurance")
+
+```
+
+
+Gambar diatas menunjukkan korelasi dari seluruh data numerik. Korelasi menujukkan `hubungan` antar variable. Catat bahwa korelasi bukan kausalitas. Angka korelasi semakin mendekati 1 atau -1 menunjukkan korelasi yang kuat, artinya kedua variabel saling bukan berhubungan tapi belum tentu saling mempengaruhi. Dari data diatas menunjukkan bahwa tinggi rendahnya tagihan `charges` berkorelasi paling tinggi dengan Umur, BMI lalu jumlah anak.  
+
+```{r}
+cor.test(dat$charges,dat$age)
+```
+
+Diatas merupakan uji korelasi pearson terhadap umur dan jumlah tagihan. p-value < 0.05 menunjukkan gagal tolak H0 yang artinya korelasi 0.299 tersebut valid. Korelasi 0.2 sebenarnya tidak menunjukkan hubungan yang kuat antara umur dan biaya asuransi. 
+
+```{r,warning=FALSE,message=FALSE}
+dat %>% 
+  ggplot(aes(x = charges,y=age)) +
+  geom_point(aes(col = charges),show.legend = F) +
+  geom_smooth(method = "lm")
+  
+```
+
+Gambar diatas menunjukkan hubungan antara biaya dan umur ditambah dengan garis linear. Terlihat bahwa memang charges dan age tidak menunjukkan pola linear, namun memang ada hubungan positif yang lemah. Artinya semakin tinggi age sedikit menggambarkan tingginya charges, namun hubungannya lemah. Dilihat dari variabel lain juga, jika ingin menebak nilai biaya asuransi, dibutuhkan variabel lain yang memiliki hubungan yang lebih kuat
+
+
+## Pengujian Hipotesis
+
+Dari banyak analisa deskriptif diatas, kali ini kita ingin membuktikan asumsi melalui uji hipotesa. Pertama kita ingin melihat apakah tagihan asuransi perokok lebih tinggi dari pada non-perorkok. Dilakukan uji T test untuk melihat apakah rata-rata perokok dan tidak adalah sama.
+
+Sebelumnya ditentukan hipotesis sebagai berikut:
+
+- `H0` : $\mu_{1}=\mu_{2}$ rata-rata biaya asuransi kedua populasi (perokok dan tidak perokok) sama    
+- `H1` : $\mu_{1}\neq\mu_{2}$ rata-rata biaya asuransi kedua populasi (perokok dan tidak perokok) **tidak** sama    
+
+
+```{r}
+t.test(charges~smoker,dat)
+```
+
+Karena P-value dibawah 0.05 (alpha default) berarti tolak `H0`, artinya dari uji statistik didapatkan cukup bukti bahwa **Ada perbedaan rata-rata dari biaya asuransi nasabah yang merokok dan tidak merokok**. Dari analisa deskriptif sebelumnya diketahui bahwa rata-rata perokok emang lebih tinggi dan sekarang kita sudah membuktikan itu
+
+
+Berikutnya kita ingin melihat apakah tagihan nasabah dengan BMI > 25 lebih tinggi daripada nasabah yang BMI < 25. Sebelumnya mari kita lihat distribusi kedua kelompok tersebut. 
+
+BMI status high artinya BMI > 25
+
+```{r}
+dat <- dat %>% 
+  mutate(bmi_status = as.factor(ifelse(bmi > 25,"high","low"))) 
+
+ggboxplot(dat,x = "bmi_status",y = "charges",color = "bmi_status", 
+          palette = c("#00AFBB", "#E7B800"),
+          ylab = "Charges", xlab = "Bmi Status")
+```
+
+Sekilas terlihat bahwa sebaran orang dengan BMI tinggi memiliki biaya yang tinggi. mereka juga mempunyai banyak outlier. Berikutnya kita akan melakukan uji 2 rata-rata 2 variabel t-test
+
+Sebelumnya ditentukan hipotesis sebagai berikut:
+
+- `H0` : $\mu_{1}=\mu_{2}$ rata-rata biaya asuransi kedua populasi (BMI tinggi dan rendah) sama    
+- `H1` : $\mu_{1}\neq\mu_{2}$ rata-rata biaya asuransi kedua populasi (BMI tinggi dan rendah) **tidak** sama    
+
+
+```{r}
+t.test(charges~bmi_status,dat)
+```
+
+Karena P-value dibawah 0.05 (alpha default) berarti tolak `H0`, artinya dari uji statistik didapatkan cukup bukti bahwa **Ada perbedaan rata-rata dari biaya asuransi nasabah yang memiliki BMI < 25 dan BMI > 25**. 
+
+
+Sebelumnya kita mengetahui bahwa sebaran biaya untuk laki-laki lebih lebar (variasi tinggi) dari biaya perempuan, nilai interquartilnya cenderung lebih tinggi. Berikutnya kita ingin mengetahui bahwa apakah ada perbedaan rata-rata biaya asuransi untuk laki-laki atau perempuan menggunakan uji 2 rata-rata t.test
+
+
+Sebelumnya ditentukan hipotesis sebagai berikut:
+
+- `H0` : $\mu_{1}=\mu_{2}$ rata-rata biaya asuransi kedua populasi (laki-laki dan perempuan) sama    
+- `H1` : $\mu_{1}\neq\mu_{2}$ rata-rata biaya asuransi kedua populasi (laki-laki dan perempuan) **tidak** sama    
+
+
+```{r}
+t.test(charges~sex,dat)
+```
+
+Karena P-value dibawah 0.05 (alpha default) berarti tolak `H0`, artinya dari uji statistik didapatkan cukup bukti bahwa **Ada perbedaan rata-rata dari biaya asuransi nasabah laki-laki dan perempuan**. Walaupun dilihat dari selisih p-value nya dengan alpha yang sangat rendah, barangkali dengan tambahan data uji ini bisa menunjukkan hasil yang berbeda.  
+
+
+
+
+Thank You !
